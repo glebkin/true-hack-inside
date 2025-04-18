@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+option go_package = "contest/api";
+
+service TrueTechHackContest {
+  rpc RegisterTeam(RegisterTeamRequest) returns (google.protobuf.Empty) {}
+  rpc SubmitSolution(SubmitSolutionRequest) returns (google.protobuf.Empty) {}
+  rpc GetLeaderboard(GetLeaderboardRequest) returns (GetLeaderboardResponse) {}
+}
+
+message RegisterTeamRequest {
+  string team_name = 1;
+  repeated string team_members = 2;
+}
+
+message RegisterTeamResponse {
+  string message = 1;
+}
+
+message SubmitSolutionRequest {
+  string team_name = 1;
+  string solution = 2;
+}
+
+message GetLeaderboardRequest {
+}
+
+message GetLeaderboardResponse {
+  repeated TeamScore scores = 1;
+}
+
+message TeamScore {
+  string team_name = 1;
+  int32 score = 2;
+}

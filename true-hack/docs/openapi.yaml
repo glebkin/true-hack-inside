@@ -1,0 +1,107 @@
+openapi: 3.0.0
+info:
+  title: True Hack LLM Analytics API
+  version: 1.0.0
+  description: API for analyzing system metrics using LLM
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /api/v1/analyze:
+    post:
+      summary: Analyze system metrics
+      description: Send a query about system metrics and get LLM analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisRequest'
+      responses:
+        '200':
+          description: Successful analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResponse'
+        '400':
+          description: Invalid request
+        '500':
+          description: Internal server error
+
+  /api/v1/metrics:
+    get:
+      summary: Get available metrics
+      description: Retrieve list of available metrics for analysis
+      responses:
+        '200':
+          description: List of available metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsList'
+
+components:
+  schemas:
+    AnalysisRequest:
+      type: object
+      required:
+        - query
+        - time_range
+      properties:
+        query:
+          type: string
+          description: Natural language query about system metrics
+        time_range:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        metrics:
+          type: array
+          items:
+            type: string
+          description: Specific metrics to include in analysis
+
+    AnalysisResponse:
+      type: object
+      properties:
+        analysis:
+          type: string
+          description: LLM analysis of the metrics
+        relevant_metrics:
+          type: array
+          items:
+            type: string
+          description: Metrics used in the analysis
+        confidence:
+          type: number
+          format: float
+          description: Confidence score of the analysis
+        suggestions:
+          type: array
+          items:
+            type: string
+          description: Suggested actions based on analysis
+
+    MetricsList:
+      type: object
+      properties:
+        metrics:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              source:
+                type: string
+                enum: [prometheus, loki, jaeger] 
