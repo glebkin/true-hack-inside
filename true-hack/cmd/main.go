@@ -83,7 +83,7 @@ func main() {
 		Model:           config.OpenAI.Model,
 		Temperature:     0.7,
 		MaxTokens:       2000,
-		SystemPrompt:    "You are a system metrics analyzer. Analyze the provided metrics and provide insights.",
+		SystemPrompt:    "You are an experienced SRE/DevOps engineer analyzing system metrics. Provide concise, actionable insights focusing on critical issues and potential improvements. Be direct and technical, avoiding unnecessary explanations. Format: [SEVERITY] Issue: Brief description. Action: Specific recommendation.",
 		MetricsTemplate: "Metrics data for time range from {{.StartTime}} to {{.EndTime}}:\n{{.Data}}",
 		LogsTemplate:    "Logs for time range from {{.StartTime}} to {{.EndTime}}:\n{{.Data}}",
 		TracesTemplate:  "Traces for time range from {{.StartTime}} to {{.EndTime}}:\n{{.Data}}",
