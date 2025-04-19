@@ -3,11 +3,14 @@ package chain
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
 	"true-hack/internal/collector"
 
+	"github.com/lithammer/fuzzysearch/fuzzy"
 	"github.com/sashabaranov/go-openai"
 	"go.uber.org/zap"
 )
@@ -102,18 +105,33 @@ func (a *Analyzer) Analyze(ctx context.Context, question string, startTime, endT
 		return nil, fmt.Errorf("failed to collect Jaeger data: %v", err)
 	}
 
-	// FIXME: need to vectorize data, otherwise it will not fit into AI request
-	prometheusMaxLen := 50
-	if len(prometheusData) < prometheusMaxLen {
-		prometheusMaxLen = len(prometheusData)
-	}
-	jaegerMaxLen := 50
-	if len(jaegerData) < jaegerMaxLen {
-		jaegerMaxLen = len(jaegerData)
-	}
+	prometheusBest := findBestMatch(question, prometheusData)
+	jaegerBest := findBestMatch(question, jaegerData)
 
-	prometheusData = prometheusData[:prometheusMaxLen]
-	jaegerData = jaegerData[:jaegerMaxLen]
+	tokensLimit := 131072
+	totalTokens := 0
+
+	var userPrompt string
+	for {
+		if len(prometheusBest) > 0 && len(prometheusBest) >= len(jaegerBest) {
+			prometheusBest = prometheusBest[:len(prometheusBest)-1] // Trim Prometheus data
+		}
+		if len(jaegerBest) > 0 && len(jaegerBest) >= len(prometheusBest) {
+			jaegerBest = jaegerBest[:len(jaegerBest)-1] // Trim Jaeger data
+		}
+
+		// Recreate the user prompt and recalculate total tokens
+		userPrompt = fmt.Sprintf("Question: %s\n\nMetrics data:\n%sTraces data:\n%s",
+			question,
+			strings.Join(prometheusBest, "\n"),
+			strings.Join(jaegerBest, "\n"))
+
+		totalTokens = len(userPrompt)
+
+		if totalTokens < tokensLimit {
+			break
+		}
+	}
 
 	// Create messages for chat completion
 	messages := []openai.ChatCompletionMessage{
@@ -122,11 +140,8 @@ func (a *Analyzer) Analyze(ctx context.Context, question string, startTime, endT
 			Content: "You are a system metrics analyzer. Analyze the provided metrics and provide insights.",
 		},
 		{
-			Role: openai.ChatMessageRoleUser,
-			Content: fmt.Sprintf("Question: %s\n\nMetrics data:\n%sTraces data:\n%s",
-				question,
-				strings.Join(prometheusData, "\n"),
-				strings.Join(jaegerData, "\n")),
+			Role:    openai.ChatMessageRoleUser,
+			Content: userPrompt,
 		},
 	}
 
@@ -182,8 +197,26 @@ func (a *Analyzer) collectPrometheusData(startTime, endTime time.Time, metrics [
 			continue
 		}
 
-		result = append(result, fmt.Sprintf("Metric: %s\n", metric))
+		result = append(result, fmt.Sprintf("Metric: %s\n", data))
 	}
 
 	return result, nil
+}
+
+func findBestMatch(userQuery string, data []string) []string {
+	matches := map[int][]string{}
+	for _, target := range data {
+		rank := fuzzy.RankMatchNormalizedFold(userQuery, target)
+		matches[rank] = append(matches[rank], target)
+	}
+
+	ranks := slices.Collect(maps.Keys(matches))
+	slices.Sort(ranks)
+
+	var result []string
+	for _, rank := range slices.Backward(ranks) {
+		result = append(result, matches[rank]...)
+	}
+
+	return result
 }
