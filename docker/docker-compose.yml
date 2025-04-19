@@ -77,10 +77,12 @@ services:
       dockerfile: docker/server/Dockerfile
     ports:
       - "9080:9080"
+      - "9081:9081"
       - "9082:9082"
       - "9083:9083"
     environment:
       - SERVER_ADDRESS=:9080
+      - DEBUG_CONTROL_URL=:9081
       - PPROF_ADDRESS=:9082
       - PROMETHEUS_ADDRESS=:9083
       - TRACE_COLLECTOR=http://jaeger:14268/api/traces

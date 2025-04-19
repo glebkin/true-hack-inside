@@ -7,7 +7,8 @@ import (
 )
 
 type Config struct {
-	ServerAddress string `env:"SERVER_ADDRESS" required:"true"`
+	ServerAddress   string `env:"SERVER_ADDRESS" required:"true"`
+	DebugControlUrl string `env:"DEBUG_CONTROL_URL"`
 
 	PprofAddress      string `env:"PPROF_ADDRESS" required:"true"`
 	PrometheusAddress string `env:"PROMETHEUS_ADDRESS" required:"true"`

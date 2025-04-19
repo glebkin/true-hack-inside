@@ -22,6 +22,14 @@
 
 Остановить все - `docker-compose down`.
 
+Для `true-tech-server` есть возможность эмулировать различные отказы:
+
+`curl http://localhost:9081/debug/control?panic=true&error=true&delay=true`
+* panic=true - любые gRPC запросы к сереверу будут приводить к панике
+* error=true - любые gRPC запросы к сереверу будут возвращат ошибку Internal (Code=14)
+* delay=true - любые gRPC запросы к серверу будут обрабатываться с задержкой от 100мс до 1000мс
+
+
 ***Note: для сборки true-tech-client, true-tech-server нужен установленный Go (да простят меня питонисты).
 Я не успел никуда запушить готовые образы, поэтому при первом запуске docker-compose будет сборка тестовых микросервисов.***
 
