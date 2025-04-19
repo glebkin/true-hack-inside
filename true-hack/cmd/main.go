@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -25,6 +24,9 @@ type Config struct {
 	Prometheus struct {
 		URL string `yaml:"url"`
 	} `yaml:"prometheus"`
+	Jaeger struct {
+		URL string `yaml:"url"`
+	} `yaml:"jaeger"`
 	OpenAI struct {
 		Model   string `yaml:"model"`
 		BaseURL string `yaml:"base_url"`
@@ -43,17 +45,9 @@ func main() {
 		log.Fatalf("Failed to parse config: %v", err)
 	}
 
-	// Read API key from .token_key
-	wd, err := os.Getwd()
+	apiKeyBytes, err := os.ReadFile(".token_key")
 	if err != nil {
-		log.Fatalf("Failed to get working directory: %v", err)
-	}
-	projectRoot := filepath.Dir(wd)
-	tokenPath := filepath.Join(projectRoot, ".token_key")
-
-	apiKeyBytes, err := os.ReadFile(tokenPath)
-	if err != nil {
-		log.Fatalf("Failed to read API key file from %s: %v", tokenPath, err)
+		log.Fatalf("Failed to read API key file: %v", err)
 	}
 	apiKey := "Bearer " + strings.TrimSpace(string(apiKeyBytes))
 
@@ -68,6 +62,11 @@ func main() {
 	prometheusCollector, err := collector.NewPrometheusCollector(config.Prometheus.URL, logger)
 	if err != nil {
 		logger.Fatal("Failed to initialize Prometheus collector", zap.Error(err))
+	}
+
+	jaegerCollector, err := collector.NewJaegerCollector(config.Jaeger.URL, logger)
+	if err != nil {
+		logger.Fatal("Failed to initialize Jaeger collector", zap.Error(err))
 	}
 
 	// Initialize OpenAI client with custom base URL
@@ -95,7 +94,7 @@ func main() {
 		logger,
 		prometheusCollector,
 		nil, // Loki collector
-		nil, // Jaeger collector
+		jaegerCollector,
 		analyzerConfig,
 		cache,
 	)

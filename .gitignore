@@ -12,4 +12,4 @@
 
 # env file
 .env
-.token_key
+true-hack/configs/.token_key

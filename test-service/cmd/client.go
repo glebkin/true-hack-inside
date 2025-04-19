@@ -35,7 +35,7 @@ func main() {
 		log.Fatal("failed to load config", zap.Error(err))
 	}
 
-	err = obs.InitTraceProvider(cfg.TraceCollector, "true-tech-client", log)
+	err = obs.InitTraceProvider(ctx, cfg.TraceCollector, "true-tech-client", log)
 	if err != nil {
 		log.Fatal("failed to initialize trace provider", zap.Error(err))
 	}

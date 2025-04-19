@@ -44,9 +44,13 @@ services:
     image: jaegertracing/jaeger:latest
     container_name: jaeger
     restart: unless-stopped
+    command: --config /etc/jaeger/config.yaml
+    volumes:
+      - ./jaeger/config.yaml:/etc/jaeger/config.yaml
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     ports:
+      - "16685:16685"
       - "16686:16686"
       - "4317:4317"
       - "4318:4318"
@@ -85,7 +89,7 @@ services:
       - DEBUG_CONTROL_URL=:9081
       - PPROF_ADDRESS=:9082
       - PROMETHEUS_ADDRESS=:9083
-      - TRACE_COLLECTOR=http://jaeger:14268/api/traces
+      - TRACE_COLLECTOR=jaeger:4317
     deploy:
       resources:
         limits:
@@ -106,5 +110,14 @@ services:
       - SERVER_ADDRESS=true-tech-server:9080
       - PPROF_ADDRESS=:9092
       - PROMETHEUS_ADDRESS=:9093
-      - TRACE_COLLECTOR=http://jaeger:14268/api/traces
+      - TRACE_COLLECTOR=jaeger:4317
       - CLIENT_INTERVAL=1s
+
+  true-hack:
+    container_name: true-hack
+    restart: unless-stopped
+    build:
+      context: ../true-hack
+      dockerfile: Dockerfile
+    ports:
+      - "9050:9050"

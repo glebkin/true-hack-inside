@@ -11,6 +11,7 @@
 - cadvisor - сбор контейнерных метрик
 - true-tech-server - тестовый gRPC сервер
 - true-tech-client - тестовый gRPC клиент, который шлет рандомные запросы на сервер и генерирует нагрузку
+- true-hack - RAG+LLM для интеграции с OBS сервисами
 
 ## Запуск
 
@@ -18,7 +19,9 @@
 
 Графана доступна по адресу `http://localhost:3000`.
 
-Для пересборки true-tech-client, true-tech-server - `docker-compose build`.
+true-hack - `http://localhost:9050`
+
+Для пересборки true-tech-client, true-tech-server, true-hack - `docker-compose build`.
 
 Остановить все - `docker-compose down`.
 

@@ -1,9 +1,0 @@
-server:
-  port: 8081
-
-prometheus:
-  url: "http://localhost:9090"
-
-openai:
-  model: "mws-gpt-alpha"
-  base_url: "https://api.gpt.mws.ru/v1" 

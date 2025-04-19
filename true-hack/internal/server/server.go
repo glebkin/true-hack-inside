@@ -60,7 +60,7 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.analyzer.Analyze(req.Question, startTime, endTime, req.Metrics)
+	result, err := s.analyzer.Analyze(r.Context(), req.Question, startTime, endTime, req.Metrics)
 	if err != nil {
 		s.logger.Error("Failed to analyze", zap.Error(err))
 		http.Error(w, fmt.Sprintf("Analysis failed: %v", err), http.StatusInternalServerError)

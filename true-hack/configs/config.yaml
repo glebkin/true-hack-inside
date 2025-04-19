@@ -1,13 +1,16 @@
+server:
+  port: 9050
+
 prometheus:
-  url: "http://localhost:9090"
+  url: "http://prometheus:9090"
   query_timeout: "30s"
 
 loki:
-  url: "http://localhost:3100"
+  url: "http://loki:3100"
   query_timeout: "30s"
 
 jaeger:
-  url: "http://localhost:16686"
+  url: "jaeger:16685"
   query_timeout: "30s"
 
 openai:
@@ -43,6 +46,3 @@ chain:
   traces_template: |
     Here are the relevant traces for the time period {time_range}:
     {traces}
-
-server:
-  addr: ":8081" 

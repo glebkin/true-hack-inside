@@ -6,13 +6,14 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/credentials/insecure"
 	"net/http"
 	"net/http/pprof"
 	"runtime"
@@ -104,10 +105,10 @@ func StartPrometheusExporter(addr string, log *zap.Logger) error {
 	return srv.ListenAndServe()
 }
 
-func InitTraceProvider(addr, serviceName string, log *zap.Logger) error {
+func InitTraceProvider(ctx context.Context, addr, serviceName string, log *zap.Logger) error {
 	log.Info("creating otel trace provider", zap.String("JAEGER_ADDRESS", addr))
 
-	exporter, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(addr)))
+	exporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(addr), otlptracegrpc.WithTLSCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("creating jaeger exporter: %w", err)
 	}

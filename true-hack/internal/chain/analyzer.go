@@ -68,7 +68,7 @@ type AnalysisResponse struct {
 	Suggestions     []string
 }
 
-func (a *Analyzer) Analyze(question string, startTime, endTime time.Time, metrics []string) (*LLMResponse, error) {
+func (a *Analyzer) Analyze(ctx context.Context, question string, startTime, endTime time.Time, metrics []string) (*LLMResponse, error) {
 	// Check cache first
 	cacheKey := CacheKey{
 		Question:  question,
@@ -96,6 +96,25 @@ func (a *Analyzer) Analyze(question string, startTime, endTime time.Time, metric
 		return nil, fmt.Errorf("failed to collect Prometheus data: %v", err)
 	}
 
+	// Collect data from Jaeger
+	jaegerData, err := a.jaeger.Collect(ctx, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect Jaeger data: %v", err)
+	}
+
+	// FIXME: need to vectorize data, otherwise it will not fit into AI request
+	prometheusMaxLen := 50
+	if len(prometheusData) < prometheusMaxLen {
+		prometheusMaxLen = len(prometheusData)
+	}
+	jaegerMaxLen := 50
+	if len(jaegerData) < jaegerMaxLen {
+		jaegerMaxLen = len(jaegerData)
+	}
+
+	prometheusData = prometheusData[:prometheusMaxLen]
+	jaegerData = jaegerData[:jaegerMaxLen]
+
 	// Create messages for chat completion
 	messages := []openai.ChatCompletionMessage{
 		{
@@ -103,8 +122,11 @@ func (a *Analyzer) Analyze(question string, startTime, endTime time.Time, metric
 			Content: "You are a system metrics analyzer. Analyze the provided metrics and provide insights.",
 		},
 		{
-			Role:    openai.ChatMessageRoleUser,
-			Content: fmt.Sprintf("Question: %s\n\nMetrics data:\n%s", question, prometheusData),
+			Role: openai.ChatMessageRoleUser,
+			Content: fmt.Sprintf("Question: %s\n\nMetrics data:\n%sTraces data:\n%s",
+				question,
+				strings.Join(prometheusData, "\n"),
+				strings.Join(jaegerData, "\n")),
 		},
 	}
 
@@ -136,18 +158,18 @@ func (a *Analyzer) Analyze(question string, startTime, endTime time.Time, metric
 	return result, nil
 }
 
-func (a *Analyzer) collectPrometheusData(startTime, endTime time.Time, metrics []string) (string, error) {
+func (a *Analyzer) collectPrometheusData(startTime, endTime time.Time, metrics []string) ([]string, error) {
 	// If no specific metrics are requested, get all available metrics
 	if len(metrics) == 0 {
 		allMetrics, err := a.prometheus.GetAllMetrics()
 		if err != nil {
-			return "", fmt.Errorf("failed to get all metrics: %v", err)
+			return nil, fmt.Errorf("failed to get all metrics: %v", err)
 		}
 		metrics = allMetrics
 	}
 
 	// Collect data for each metric
-	var result strings.Builder
+	var result []string
 	for _, metric := range metrics {
 		data, err := a.prometheus.GetMetricData(metric, startTime, endTime)
 		if err != nil {
@@ -156,10 +178,12 @@ func (a *Analyzer) collectPrometheusData(startTime, endTime time.Time, metrics [
 				zap.Error(err))
 			continue
 		}
-		result.WriteString(fmt.Sprintf("Metric: %s\n", metric))
-		result.WriteString(data)
-		result.WriteString("\n\n")
+		if data == "" {
+			continue
+		}
+
+		result = append(result, fmt.Sprintf("Metric: %s\n", metric))
 	}
 
-	return result.String(), nil
+	return result, nil
 }
