@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Metrics Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">System Metrics Analyzer</h1>
+        
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Analysis Request</h2>
+            
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="query">
+                    Question
+                </label>
+                <textarea id="query" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="startTime">
+                        Start Time
+                    </label>
+                    <input type="datetime-local" id="startTime" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="endTime">
+                        End Time
+                    </label>
+                    <input type="datetime-local" id="endTime" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2">
+                    Metrics
+                </label>
+                <div id="metrics" class="space-y-2">
+                    <!-- Metrics will be populated here -->
+                </div>
+            </div>
+
+            <button id="analyze" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                Analyze
+            </button>
+        </div>
+
+        <div id="result" class="bg-white rounded-lg shadow-md p-6 hidden">
+            <h2 class="text-xl font-semibold mb-4">Analysis Result</h2>
+            
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">Analysis</h3>
+                <pre id="analysis" class="text-gray-700 whitespace-pre-wrap bg-gray-50 p-4 rounded-lg"></pre>
+            </div>
+
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">Confidence</h3>
+                <div class="flex items-center">
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mr-2">
+                        <div id="confidence" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <span id="confidenceValue" class="text-sm text-gray-600">0%</span>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">Suggestions</h3>
+                <ul id="suggestions" class="list-disc list-inside text-gray-700 space-y-2">
+                    <!-- Suggestions will be populated here -->
+                </ul>
+            </div>
+
+            <div class="mb-4">
+                <h3 class="text-lg font-medium mb-2">Relevant Metrics</h3>
+                <ul id="relevantMetrics" class="list-disc list-inside text-gray-700 space-y-2">
+                    <!-- Relevant metrics will be populated here -->
+                </ul>
+            </div>
+        </div>
+
+        <div id="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4 hidden" role="alert">
+            <strong class="font-bold">Error!</strong>
+            <span id="errorMessage" class="block sm:inline"></span>
+        </div>
+    </div>
+
+    <script>
+        // Load available metrics
+        fetch('/api/v1/metrics')
+            .then(response => response.json())
+            .then(data => {
+                const metricsDiv = document.getElementById('metrics');
+                data.metrics.forEach(metric => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center';
+                    div.innerHTML = `
+                        <input type="checkbox" id="${metric}" class="mr-2">
+                        <label for="${metric}">${metric}</label>
+                    `;
+                    metricsDiv.appendChild(div);
+                });
+            })
+            .catch(error => showError('Failed to load metrics: ' + error.message));
+
+        // Set default time range (last hour)
+        const now = new Date();
+        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+        
+        document.getElementById('startTime').value = oneHourAgo.toISOString().slice(0, 16);
+        document.getElementById('endTime').value = now.toISOString().slice(0, 16);
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = message;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => {
+                errorDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Handle analyze button click
+        document.getElementById('analyze').addEventListener('click', async () => {
+            const query = document.getElementById('query').value;
+            const startTime = new Date(document.getElementById('startTime').value).toISOString();
+            const endTime = new Date(document.getElementById('endTime').value).toISOString();
+            
+            if (!query) {
+                showError('Please enter a question');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/v1/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question: query,
+                        start_time: startTime,
+                        end_time: endTime,
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log('Analysis result:', result);
+                
+                // Display results
+                document.getElementById('analysis').textContent = result.analysis || 'No analysis available';
+                
+                const confidencePercent = Math.round((result.confidence || 0) * 100);
+                document.getElementById('confidence').style.width = `${confidencePercent}%`;
+                document.getElementById('confidenceValue').textContent = `${confidencePercent}%`;
+                
+                const suggestionsList = document.getElementById('suggestions');
+                suggestionsList.innerHTML = '';
+                if (result.suggestions && Array.isArray(result.suggestions)) {
+                    result.suggestions.forEach(suggestion => {
+                        const li = document.createElement('li');
+                        li.textContent = suggestion;
+                        suggestionsList.appendChild(li);
+                    });
+                } else {
+                    const li = document.createElement('li');
+                    li.textContent = 'No suggestions available';
+                    suggestionsList.appendChild(li);
+                }
+
+                const metricsList = document.getElementById('relevantMetrics');
+                metricsList.innerHTML = '';
+                if (result.relevant_metrics && Array.isArray(result.relevant_metrics)) {
+                    result.relevant_metrics.forEach(metric => {
+                        const li = document.createElement('li');
+                        li.textContent = metric;
+                        metricsList.appendChild(li);
+                    });
+                } else {
+                    const li = document.createElement('li');
+                    li.textContent = 'No relevant metrics available';
+                    metricsList.appendChild(li);
+                }
+
+                document.getElementById('result').classList.remove('hidden');
+                document.getElementById('error').classList.add('hidden');
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('analysis').textContent = `Error: ${error.message}`;
+                document.getElementById('result').classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html> 

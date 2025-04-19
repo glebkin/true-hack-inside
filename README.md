@@ -39,3 +39,10 @@
 ## Схема (упрощенно)
 
 ![img.png](img.png)
+
+* Data Collection Layer
+* Vectorization Layer
+* RAG Engine
+* LLM Interface 
+* Реализовать Loki collector 
+* Реализовать Jaeger collector

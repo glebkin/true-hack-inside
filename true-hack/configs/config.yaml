@@ -1,0 +1,48 @@
+prometheus:
+  url: "http://localhost:9090"
+  query_timeout: "30s"
+
+loki:
+  url: "http://localhost:3100"
+  query_timeout: "30s"
+
+jaeger:
+  url: "http://localhost:16686"
+  query_timeout: "30s"
+
+openai:
+  api_key: "" # Will be set via environment variable
+  base_url: "https://api.gpt.mws.ru/v1" # Custom OpenAI API URL
+  model: "mws-gpt-alpha"
+  temperature: 0.7
+  max_tokens: 1000
+
+chain:
+  system_prompt: |
+    You are an expert in analyzing system metrics and logs. Your task is to help understand what's happening in the system based on provided metrics, logs, and traces.
+    You should:
+    1. Analyze the provided data
+    2. Identify any issues or anomalies
+    3. Provide clear explanations
+    4. Suggest possible solutions
+    5. Be concise and technical
+    6. Format your response as JSON with the following fields:
+       - analysis: string
+       - confidence: float (0-1)
+       - suggestions: array of strings
+       - relevant_metrics: array of strings
+
+  metrics_template: |
+    Here are the relevant metrics for the time period {time_range}:
+    {metrics}
+
+  logs_template: |
+    Here are the relevant logs for the time period {time_range}:
+    {logs}
+
+  traces_template: |
+    Here are the relevant traces for the time period {time_range}:
+    {traces}
+
+server:
+  addr: ":8081" 
