@@ -83,61 +83,22 @@ func (a *Analyzer) Analyze(ctx context.Context, question string, startTime, endT
 		return cached, nil
 	}
 
-	// If no metrics specified, get all available metrics
-	if len(metrics) == 0 {
-		allMetrics, err := a.prometheus.GetAllMetrics()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get all metrics: %v", err)
-		}
-		metrics = allMetrics
-		a.logger.Info("Using all available metrics", zap.Int("count", len(metrics)))
-	}
-
 	// Collect data from Prometheus
 	prometheusData, err := a.collectPrometheusData(startTime, endTime, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("failed to collect Prometheus data: %v", err)
 	}
 
-	// Collect data from Jaeger
-	jaegerData, err := a.jaeger.Collect(ctx, startTime, endTime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to collect Jaeger data: %v", err)
-	}
-
-	prometheusBest := findBestMatch(question, prometheusData)
-	jaegerBest := findBestMatch(question, jaegerData)
-
-	tokensLimit := 131072
-	totalTokens := 0
-
-	var userPrompt string
-	for {
-		if len(prometheusBest) > 0 && len(prometheusBest) >= len(jaegerBest) {
-			prometheusBest = prometheusBest[:len(prometheusBest)-1] // Trim Prometheus data
-		}
-		if len(jaegerBest) > 0 && len(jaegerBest) >= len(prometheusBest) {
-			jaegerBest = jaegerBest[:len(jaegerBest)-1] // Trim Jaeger data
-		}
-
-		// Recreate the user prompt and recalculate total tokens
-		userPrompt = fmt.Sprintf("Question: %s\n\nMetrics data:\n%sTraces data:\n%s",
-			question,
-			strings.Join(prometheusBest, "\n"),
-			strings.Join(jaegerBest, "\n"))
-
-		totalTokens = len(userPrompt)
-
-		if totalTokens < tokensLimit {
-			break
-		}
-	}
+	// Create a more concise prompt
+	userPrompt := fmt.Sprintf("Question: %s\n\nMetrics data:\n%s",
+		question,
+		strings.Join(prometheusData, ""))
 
 	// Create messages for chat completion
 	messages := []openai.ChatCompletionMessage{
 		{
 			Role:    openai.ChatMessageRoleSystem,
-			Content: "You are a system metrics analyzer. Analyze the provided metrics and provide insights.",
+			Content: "You are a system metrics analyzer. Analyze the provided metrics and provide insights. Be concise and focus on key findings.",
 		},
 		{
 			Role:    openai.ChatMessageRoleUser,
@@ -149,8 +110,9 @@ func (a *Analyzer) Analyze(ctx context.Context, question string, startTime, endT
 	resp, err := a.client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model:    a.config.Model,
-			Messages: messages,
+			Model:     a.config.Model,
+			Messages:  messages,
+			MaxTokens: a.config.MaxTokens,
 		},
 	)
 	if err != nil {
@@ -173,6 +135,19 @@ func (a *Analyzer) Analyze(ctx context.Context, question string, startTime, endT
 	return result, nil
 }
 
+// estimateTokens приблизительно оценивает количество токенов в строке
+// В среднем 1 токен ~ 4 символа для английского текста
+func estimateTokens(text string) int {
+	// Базовое количество токенов для системного промпта и вопроса
+	baseTokens := 100
+
+	// Оцениваем количество токенов в тексте
+	// Учитываем, что метрики содержат много чисел и специальных символов
+	tokenCount := len(text) / 3 // Более консервативная оценка
+
+	return baseTokens + tokenCount
+}
+
 func (a *Analyzer) collectPrometheusData(startTime, endTime time.Time, metrics []string) ([]string, error) {
 	// If no specific metrics are requested, get all available metrics
 	if len(metrics) == 0 {
@@ -183,9 +158,37 @@ func (a *Analyzer) collectPrometheusData(startTime, endTime time.Time, metrics [
 		metrics = allMetrics
 	}
 
-	// Collect data for each metric
+	// Filter important metrics
+	importantMetrics := []string{
+		"machine_cpu_cores",
+		"machine_cpu_physical_cores",
+		"machine_memory_bytes",
+		"process_cpu_seconds_total",
+		"process_resident_memory_bytes",
+		"container_cpu_usage_seconds_total",
+		"container_memory_usage_bytes",
+	}
+
+	// Create a map of important metrics for quick lookup
+	importantMap := make(map[string]bool)
+	for _, m := range importantMetrics {
+		importantMap[m] = true
+	}
+
+	// Максимальное количество токенов для входных данных
+	// Оставляем место для системного промпта и ответа
+	maxInputTokens := 20000
+
+	// Collect data for each metric, prioritizing important ones
 	var result []string
+	var totalTokens int
+
 	for _, metric := range metrics {
+		// Пропускаем неважные метрики, если уже набрали достаточно данных
+		if totalTokens >= maxInputTokens && !importantMap[metric] {
+			continue
+		}
+
 		data, err := a.prometheus.GetMetricData(metric, startTime, endTime)
 		if err != nil {
 			a.logger.Warn("Failed to get metric data",
@@ -197,8 +200,28 @@ func (a *Analyzer) collectPrometheusData(startTime, endTime time.Time, metrics [
 			continue
 		}
 
-		result = append(result, fmt.Sprintf("Metric: %s\n", data))
+		// Оцениваем количество токенов для новой метрики
+		metricData := fmt.Sprintf("Metric: %s\n", data)
+		metricTokens := estimateTokens(metricData)
+
+		// Если добавление этой метрики превысит лимит, пропускаем её
+		if totalTokens+metricTokens > maxInputTokens && !importantMap[metric] {
+			continue
+		}
+
+		// Для важных метрик добавляем в начало
+		if importantMap[metric] {
+			result = append([]string{metricData}, result...)
+		} else {
+			result = append(result, metricData)
+		}
+
+		totalTokens += metricTokens
 	}
+
+	a.logger.Debug("Collected metrics data",
+		zap.Int("total_metrics", len(result)),
+		zap.Int("estimated_tokens", totalTokens))
 
 	return result, nil
 }
