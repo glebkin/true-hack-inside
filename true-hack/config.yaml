@@ -5,6 +5,5 @@ prometheus:
   url: "http://localhost:9090"
 
 openai:
-  api_key: "sk-..."
   model: "mws-gpt-alpha"
   base_url: "https://api.gpt.mws.ru/v1" 

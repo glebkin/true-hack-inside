@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,7 +26,6 @@ type Config struct {
 		URL string `yaml:"url"`
 	} `yaml:"prometheus"`
 	OpenAI struct {
-		APIKey  string `yaml:"api_key"`
 		Model   string `yaml:"model"`
 		BaseURL string `yaml:"base_url"`
 	} `yaml:"openai"`
@@ -42,6 +43,20 @@ func main() {
 		log.Fatalf("Failed to parse config: %v", err)
 	}
 
+	// Read API key from .token_key
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("Failed to get working directory: %v", err)
+	}
+	projectRoot := filepath.Dir(wd)
+	tokenPath := filepath.Join(projectRoot, ".token_key")
+
+	apiKeyBytes, err := os.ReadFile(tokenPath)
+	if err != nil {
+		log.Fatalf("Failed to read API key file from %s: %v", tokenPath, err)
+	}
+	apiKey := "Bearer " + strings.TrimSpace(string(apiKeyBytes))
+
 	// Initialize logger
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -56,7 +71,7 @@ func main() {
 	}
 
 	// Initialize OpenAI client with custom base URL
-	openaiConfig := openai.DefaultConfig(config.OpenAI.APIKey)
+	openaiConfig := openai.DefaultConfig(apiKey)
 	openaiConfig.BaseURL = config.OpenAI.BaseURL
 	openaiClient := openai.NewClientWithConfig(openaiConfig)
 

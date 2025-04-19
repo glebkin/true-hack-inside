@@ -12,3 +12,4 @@
 
 # env file
 .env
+.token_key
