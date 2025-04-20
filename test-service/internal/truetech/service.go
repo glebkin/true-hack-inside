@@ -2,13 +2,16 @@ package truetech
 
 import (
 	"context"
+	"fmt"
+	"math/rand/v2"
+	"truetechhackllm/test-service/api"
+	"truetechhackllm/test-service/internal/model"
+
 	"go.opentelemetry.io/otel"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"truetechhackllm/test-service/api"
-	"truetechhackllm/test-service/internal/model"
 )
 
 type Service struct {
@@ -73,6 +76,10 @@ func (s *Service) GetLeaderboard(ctx context.Context, _ *api.GetLeaderboardReque
 		Scores: nil,
 	}
 
+	// Randomly inject error ~20% of the time
+	if rand.Float64() < 0.2 {
+		return nil, fmt.Errorf("injected random error")
+	}
 	teams := s.teamStorage.GetAll()
 	for _, team := range teams {
 		resp.Scores = append(resp.Scores, &api.TeamScore{

@@ -89,7 +89,7 @@ func main() {
 	}
 
 	// Initialize analyzer
-	analyzer := chain.NewAnalyzer(
+	analyzer, err := chain.NewAnalyzer(
 		openaiClient,
 		logger,
 		prometheusCollector,
@@ -98,6 +98,9 @@ func main() {
 		analyzerConfig,
 		cache,
 	)
+	if err != nil {
+		logger.Fatal("Failed to initialize analyzer", zap.Error(err))
+	}
 
 	// Initialize server
 	server := server.NewServer(analyzer, logger)

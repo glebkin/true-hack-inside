@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os/exec"
 	"slices"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ type Analyzer struct {
 	jaeger     *collector.JaegerCollector
 	config     *Config
 	cache      *Cache
+	gitInfo    *GitInfo
 }
 
 type Config struct {
@@ -35,6 +37,11 @@ type Config struct {
 	TracesTemplate  string
 }
 
+type GitInfo struct {
+	LastCommitHash string
+	LastCommitDiff string
+}
+
 func NewAnalyzer(
 	client *openai.Client,
 	logger *zap.Logger,
@@ -43,7 +50,13 @@ func NewAnalyzer(
 	jaeger *collector.JaegerCollector,
 	config *Config,
 	cache *Cache,
-) *Analyzer {
+) (*Analyzer, error) {
+	gitInfo, err := getGitInfo()
+	if err != nil {
+		logger.Warn("Failed to get git information", zap.Error(err))
+		gitInfo = &GitInfo{} // Initialize with empty values
+	}
+
 	return &Analyzer{
 		client:     client,
 		logger:     logger,
@@ -52,7 +65,8 @@ func NewAnalyzer(
 		jaeger:     jaeger,
 		config:     config,
 		cache:      cache,
-	}
+		gitInfo:    gitInfo,
+	}, nil
 }
 
 type AnalysisRequest struct {
@@ -90,15 +104,17 @@ func (a *Analyzer) Analyze(ctx context.Context, question string, startTime, endT
 	}
 
 	// Create a more concise prompt
-	userPrompt := fmt.Sprintf("Question: %s\n\nMetrics data:\n%s",
+	userPrompt := fmt.Sprintf("Question: %s\n\nMetrics data:\n%s\n\nRecent changes:\n%s\n%s",
 		question,
-		strings.Join(prometheusData, ""))
+		strings.Join(prometheusData, ""),
+		a.gitInfo.LastCommitHash,
+		a.gitInfo.LastCommitDiff)
 
 	// Create messages for chat completion
 	messages := []openai.ChatCompletionMessage{
 		{
 			Role:    openai.ChatMessageRoleSystem,
-			Content: "You are a system metrics analyzer. Analyze the provided metrics and provide insights. Be concise and focus on key findings.",
+			Content: "You are a system metrics analyzer. Analyze the provided metrics and provide insights. Be concise and focus on key findings. Consider recent code changes when analyzing the metrics.",
 		},
 		{
 			Role:    openai.ChatMessageRoleUser,
@@ -163,10 +179,11 @@ func (a *Analyzer) collectPrometheusData(startTime, endTime time.Time, metrics [
 		"machine_cpu_cores",
 		"machine_cpu_physical_cores",
 		"machine_memory_bytes",
-		"process_cpu_seconds_total",
-		"process_resident_memory_bytes",
-		"container_cpu_usage_seconds_total",
-		"container_memory_usage_bytes",
+		// "process_cpu_seconds_total",
+		// "process_resident_memory_bytes",
+		// "container_cpu_usage_seconds_total",
+		// "container_memory_usage_bytes",
+		"grpc_server_handled_total",
 	}
 
 	// Create a map of important metrics for quick lookup
@@ -242,4 +259,32 @@ func findBestMatch(userQuery string, data []string) []string {
 	}
 
 	return result
+}
+
+func getGitInfo() (*GitInfo, error) {
+	// Get last commit hash and message
+	cmd := exec.Command("git", "log", "-1", "--pretty=format:%H %s")
+	commitBytes, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get git commit info: %v", err)
+	}
+	commitInfo := strings.TrimSpace(string(commitBytes))
+
+	// Get last commit diff, but only for relevant files
+	cmd = exec.Command("git", "diff", "HEAD~1", "--", "*.go", "*.yaml", "*.json", "*.md")
+	diffBytes, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get git diff: %v", err)
+	}
+	diff := string(diffBytes)
+
+	// If diff is too long, truncate it
+	if len(diff) > 2000 {
+		diff = diff[:2000] + "\n... (truncated)"
+	}
+
+	return &GitInfo{
+		LastCommitHash: commitInfo,
+		LastCommitDiff: diff,
+	}, nil
 }
